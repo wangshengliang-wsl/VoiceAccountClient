@@ -7,202 +7,146 @@ struct VoiceInputView: View {
     @ObservedObject var audioRecorder: AudioRecorder
     @Binding var isUploading: Bool
     @Binding var uploadStatus: String
-    
+
     @State private var hasPermission = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var micScale: CGFloat = 1.0
     @State private var showSuccess = false
+    @State private var recognitionResult = ""
     
     var body: some View {
         NavigationView {
             ZStack {
                 // 使用主题背景
                 ThemedBackgroundView()
-                
+
                 VStack(spacing: 0) {
+                    // 点击开始录音提示
+                    Text(audioRecorder.isRecording ? "录音中..." : "点击开始录音")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.primary.opacity(0.8))
+                        .padding(.top, 40)
+                        .padding(.bottom, 60)
+
                     Spacer()
-                    
-                    // 顶部状态区域
-                    VStack(spacing: 16) {
-                        if audioRecorder.isRecording {
-                            // 录音时间
-                            Text(audioRecorder.formattedTime())
-                                .font(.system(size: 56, weight: .light, design: .rounded))
-                                .foregroundColor(.white)
-                                .transition(.scale.combined(with: .opacity))
-                        } else if isUploading {
-                            // 上传中
-                            VStack(spacing: 12) {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.5)
-                                
-                                Text(uploadStatus)
-                                    .font(.headline)
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        } else if showSuccess {
-                            // 成功状态
-                            VStack(spacing: 12) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 64))
-                                    .foregroundColor(.green)
-                                
-                                Text("上传成功")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        } else {
-                            // 准备状态
-                            Text("轻触开始录音")
-                                .font(.title2)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.8))
-                                .transition(.opacity)
-                        }
-                    }
-                    .frame(height: 120)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: audioRecorder.isRecording)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isUploading)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: showSuccess)
-                    
-                    Spacer()
-                    
-                    // 声波效果区域
-                    ZStack {
-                        if audioRecorder.isRecording {
-                            SoundWaveView(isAnimating: .constant(audioRecorder.isRecording))
-                                .frame(height: 100)
-                                .padding(.horizontal, 40)
-                                .transition(.opacity.combined(with: .scale))
-                        }
-                    }
-                    .frame(height: 120)
-                    .animation(.easeInOut(duration: 0.3), value: audioRecorder.isRecording)
-                    
-                    Spacer()
-                    
+
                     // 中央录音按钮
-                    ZStack {
-                        // 脉冲圆环效果
+                    Button(action: {
                         if audioRecorder.isRecording {
-                            ForEach(0..<3) { index in
-                                PulseRingView(delay: Double(index) * 0.6)
-                                    .frame(width: 120, height: 120)
-                            }
-                            .transition(.opacity)
-                        }
-                        
-                        // 主按钮
-                        Button(action: {
-                            if audioRecorder.isRecording {
-                                stopRecording()
-                            } else {
-                                startRecording()
-                            }
-                        }) {
-                            ZStack {
-                                // 外圈
-                                Circle()
-                                    .strokeBorder(
-                                        (colorScheme == .dark ? Color.white : Color.primary).opacity(0.2),
-                                        lineWidth: 2
-                                    )
-                                    .frame(width: 140, height: 140)
-                                
-                                // 主圆形
-                                Circle()
-                                    .fill(
-                                        audioRecorder.isRecording
-                                        ? LinearGradient(
-                                            colors: [Color.red, Color.red.opacity(0.8)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                        : LinearGradient(
-                                            colors: [
-                                                colorScheme == .dark ? Color.white : Color(red: 0.95, green: 0.95, blue: 0.97),
-                                                colorScheme == .dark ? Color.white.opacity(0.9) : Color(red: 0.9, green: 0.9, blue: 0.92)
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                                    .frame(width: 120, height: 120)
-                                    .shadow(
-                                        color: audioRecorder.isRecording
-                                        ? Color.red.opacity(0.5)
-                                        : (colorScheme == .dark ? Color.white.opacity(0.3) : Color.black.opacity(0.2)),
-                                        radius: 20,
-                                        x: 0,
-                                        y: 10
-                                    )
-                                    .scaleEffect(micScale)
-                                
-                                // 图标
-                                Image(systemName: audioRecorder.isRecording ? "stop.fill" : "mic.fill")
-                                    .font(.system(size: 52, weight: .medium))
-                                    .foregroundColor(
-                                        audioRecorder.isRecording
-                                        ? .white
-                                        : (colorScheme == .dark ? Color(red: 0.05, green: 0.05, blue: 0.15) : Color(red: 0.2, green: 0.2, blue: 0.3))
-                                    )
-                                    .scaleEffect(audioRecorder.isRecording ? 0.7 : 1.0)
-                            }
-                        }
-                        .disabled(isUploading)
-                    }
-                    .frame(height: 200)
-                    .onChange(of: audioRecorder.isRecording) { _, isRecording in
-                        if isRecording {
-                            startMicAnimation()
+                            stopRecording()
                         } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                micScale = 1.0
-                            }
+                            startRecording()
+                        }
+                    }) {
+                        ZStack {
+                            // 主圆形 - 蓝色渐变
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.4, green: 0.6, blue: 1.0),
+                                            Color(red: 0.2, green: 0.4, blue: 0.9)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(width: 140, height: 140)
+                                .shadow(
+                                    color: Color.blue.opacity(0.3),
+                                    radius: 20,
+                                    x: 0,
+                                    y: 10
+                                )
+                                .scaleEffect(micScale)
+
+                            // 麦克风图标
+                            Image(systemName: audioRecorder.isRecording ? "stop.fill" : "mic.fill")
+                                .font(.system(size: 56, weight: .medium))
+                                .foregroundColor(.white)
                         }
                     }
-                    
+                    .disabled(isUploading)
+
                     Spacer()
-                    
-                    // 底部提示
-                    VStack(spacing: 8) {
-                        if !audioRecorder.isRecording && !isUploading {
-                            HStack(spacing: 4) {
-                                Image(systemName: "info.circle")
-                                    .font(.caption)
-                                Text("录音将自动上传到云端")
-                                    .font(.caption)
+
+                    // 识别结果区域
+                    if !recognitionResult.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("识别结果")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.primary.opacity(0.7))
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                Text(recognitionResult)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(3)
+                                    .padding(12)
                             }
-                            .foregroundColor(.white.opacity(0.5))
                         }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.05), radius: 5)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 20)
+                    } else {
+                        Spacer()
+                            .frame(height: 80)
                     }
-                    .frame(height: 40)
-                    .padding(.bottom, 40)
+
+                    // 底部保存按钮
+                    Button(action: {
+                        // 保存操作
+                        dismiss()
+                    }) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                            Text("保存")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.4, green: 0.49, blue: 0.92),
+                                    Color(red: 0.46, green: 0.29, blue: 0.64)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
+                        .shadow(color: Color(red: 0.4, green: 0.49, blue: 0.92).opacity(0.3), radius: 10)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 30)
                 }
             }
             .navigationTitle("语音记账")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         if audioRecorder.isRecording {
                             audioRecorder.cancelRecording()
                         }
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(colorScheme == .dark ? .white.opacity(0.8) : .primary.opacity(0.7))
+                        Text("关闭")
+                            .font(.system(size: 16))
+                            .foregroundColor(.primary.opacity(0.7))
                     }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(colorScheme == .dark ? .dark : .light, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .alert("提示", isPresented: $showingAlert) {
                 Button("确定", role: .cancel) { }
             } message: {
@@ -251,37 +195,43 @@ struct VoiceInputView: View {
     private func uploadAudioFile(_ fileURL: URL) {
         isUploading = true
         uploadStatus = "正在上传..."
-        
+
+        // 显示文件路径
+        recognitionResult = fileURL.path
+
         NetworkManager.shared.uploadAudio(fileURL: fileURL) { result in
             isUploading = false
-            
+
             switch result {
             case .success(let response):
                 if response.status == "success" {
                     uploadStatus = ""
-                    
+                    recognitionResult = "上传成功: \(response.data?.url ?? "")"
+
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         showSuccess = true
-                    }
-                    
-                    // 延迟关闭
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        dismiss()
                     }
                 } else {
                     uploadStatus = ""
                     alertMessage = response.message
                     showingAlert = true
                 }
-                
+
             case .failure(let error):
                 uploadStatus = ""
-                alertMessage = "上传失败: \(error.localizedDescription)"
+                // 如果错误信息已经包含"上传失败"或"失败",则不再添加前缀
+                let errorMsg = error.localizedDescription
+                if errorMsg.contains("上传失败") || errorMsg.contains("失败") {
+                    alertMessage = errorMsg
+                } else {
+                    alertMessage = "上传失败: \(errorMsg)"
+                }
+                recognitionResult = "上传失败"
                 showingAlert = true
             }
         }
     }
-    
+
     private func startMicAnimation() {
         withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
             micScale = 1.05

@@ -37,7 +37,6 @@ class CSVExporter {
             try csvText.write(to: path, atomically: true, encoding: .utf8)
             return path
         } catch {
-            print("CSV导出失败: \(error)")
             return nil
         }
     }

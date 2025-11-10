@@ -394,25 +394,19 @@ struct StatisticsView: View {
                                         let yAxisWidth: CGFloat = 40
                                         let chartWidth = geometry.size.width - yAxisWidth
                                         let adjustedX = location.x - yAxisWidth
-                                        
-                                        print("📊 点击位置: \(location.x), 调整后: \(adjustedX), 图表宽度: \(chartWidth)")
-                                        
+
                                         if adjustedX >= 0 && adjustedX <= chartWidth {
                                             let barWidth = chartWidth / CGFloat(data.count)
                                             let tappedIndex = Int(adjustedX / barWidth)
-                                            
-                                            print("📊 柱子宽度: \(barWidth), 点击索引: \(tappedIndex), 数据数量: \(data.count)")
-                                            
+
                                             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                                                 if tappedIndex >= 0 && tappedIndex < data.count {
                                                     if selectedBarIndex == tappedIndex {
                                                         // 点击已选中的柱子则取消选中
-                                                        print("✅ 取消选中柱子 \(tappedIndex)")
                                                         selectedBarIndex = nil
                                                         selectedBarLabel = nil
                                                     } else {
                                                         // 选中新的柱子
-                                                        print("✅ 选中柱子 \(tappedIndex): \(data[tappedIndex].label), 金额: \(data[tappedIndex].amount)")
                                                         selectedBarIndex = tappedIndex
                                                         selectedBarLabel = data[tappedIndex].label
                                                     }

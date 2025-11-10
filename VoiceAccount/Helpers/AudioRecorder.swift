@@ -68,8 +68,7 @@ class AudioRecorder: NSObject, ObservableObject {
                 guard let self = self, let startTime = self.startTime else { return }
                 self.recordingTime = Date().timeIntervalSince(startTime)
             }
-            
-            print("开始录音: \(audioFilename.path)")
+
         } catch {
             errorMessage = "无法开始录音: \(error.localizedDescription)"
         }
@@ -86,12 +85,10 @@ class AudioRecorder: NSObject, ObservableObject {
         do {
             try AVAudioSession.sharedInstance().setActive(false)
         } catch {
-            print("停用音频会话失败: \(error.localizedDescription)")
+            // 忽略停用错误
         }
-        
-        print("停止录音，文件保存在: \(audioFileURL?.path ?? "未知")")
     }
-    
+
     /// 取消录音并删除文件
     func cancelRecording() {
         audioRecorder?.stop()
@@ -111,10 +108,10 @@ class AudioRecorder: NSObject, ObservableObject {
         do {
             try AVAudioSession.sharedInstance().setActive(false)
         } catch {
-            print("停用音频会话失败: \(error.localizedDescription)")
+            // 忽略停用错误
         }
     }
-    
+
     /// 格式化时间显示
     func formattedTime() -> String {
         let minutes = Int(recordingTime) / 60
