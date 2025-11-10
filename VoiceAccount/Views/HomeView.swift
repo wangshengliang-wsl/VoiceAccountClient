@@ -13,7 +13,11 @@ struct HomeView: View {
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var currencyManager = CurrencyManager.shared
+    @StateObject private var audioRecorder = AudioRecorder()
     @State private var showingManualInput = false
+    @State private var showingVoiceInput = false
+    @State private var uploadStatus: String = ""
+    @State private var isUploading = false
     
     var todayExpenses: [Expense] {
         let calendar = Calendar.current
@@ -70,14 +74,14 @@ struct HomeView: View {
                         HStack(spacing: 16) {
                             // Voice Input Button
                             Button(action: {
-                                // Voice input action
+                                showingVoiceInput = true
                             }) {
                                 VStack(spacing: 12) {
                                     Image(systemName: "mic.fill")
                                         .font(.system(size: 30))
                                     Text("语音输入")
                                         .fontWeight(.semibold)
-                                    Text("长按开始录音")
+                                    Text("点击开始录音")
                                         .font(.caption)
                                         .opacity(0.8)
                                 }
@@ -151,6 +155,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showingManualInput) {
             ManualInputView()
+        }
+        .sheet(isPresented: $showingVoiceInput) {
+            VoiceInputView(audioRecorder: audioRecorder, isUploading: $isUploading, uploadStatus: $uploadStatus)
         }
     }
 }
