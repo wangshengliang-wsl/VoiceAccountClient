@@ -209,7 +209,7 @@ struct StatisticsView: View {
         }
         .pickerStyle(.segmented)
         .padding(.horizontal)
-        .onChange(of: selectedPeriod) { _ in
+        .onChange(of: selectedPeriod) { oldValue, newValue in
             selectedBarIndex = nil
             selectedBarLabel = nil
             withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {

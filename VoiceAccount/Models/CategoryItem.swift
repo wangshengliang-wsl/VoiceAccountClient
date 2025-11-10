@@ -36,6 +36,8 @@ struct CategoryItem: Identifiable, Codable, Equatable {
 
 // 分类管理器
 class CategoryManager: ObservableObject {
+    static let shared = CategoryManager()
+    
     @Published var allCategories: [CategoryItem] = []
     
     private let saveKey = "AllCategories"
@@ -108,7 +110,10 @@ extension Color {
     }
     
     func toHex() -> String? {
-        guard let components = UIColor(self).cgColor.components, components.count >= 3 else {
+        // 直接使用 CGColor 来避免递归调用 UIColor(_ color: Color)
+        let environment = EnvironmentValues()
+        let resolvedColor = self.resolve(in: environment)
+        guard let components = resolvedColor.cgColor.components, components.count >= 3 else {
             return nil
         }
         

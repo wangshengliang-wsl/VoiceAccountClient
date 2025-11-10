@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ColorPickerView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var themeManager: ThemeManager
     @Binding var themeColors: ThemeColors
     @State private var editingColors: [String]
     @State private var selectedColorIndex: Int = 0
@@ -136,6 +137,7 @@ struct ColorPickerView: View {
                             }
                         } : nil
                     )
+                    .environmentObject(themeManager)
                 }
             }
         }
@@ -202,6 +204,7 @@ struct ColorRowView: View {
     let index: Int
     let onColorChange: (String) -> Void
     let onDelete: (() -> Void)?
+    @EnvironmentObject var themeManager: ThemeManager
     
     @State private var showingColorPicker = false
     @State private var selectedColor: Color
@@ -264,6 +267,7 @@ struct ColorRowView: View {
                     }
                 }
             )
+            .environmentObject(themeManager)
         }
     }
 }
@@ -272,6 +276,7 @@ struct ColorRowView: View {
 
 struct SystemColorPickerView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var themeManager: ThemeManager
     @Binding var selectedColor: Color
     let onSave: (Color) -> Void
     
@@ -286,15 +291,8 @@ struct SystemColorPickerView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 1.0, green: 0.96, blue: 0.9),
-                        Color(red: 1.0, green: 0.88, blue: 0.7)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                // 主题背景
+                ThemedBackgroundView()
                 
                 VStack(spacing: 24) {
                     // 颜色预览
@@ -357,14 +355,36 @@ extension UIColor {
     }
     
     convenience init(_ color: Color) {
-        let uiColor = UIColor(color)
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        
-        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        self.init(red: red, green: green, blue: blue, alpha: alpha)
+        // 使用 CGColor 来避免递归调用
+        // SwiftUI Color 可以通过 CGColor 来获取颜色组件
+        if #available(iOS 14.0, *) {
+            // 使用环境值来解析颜色
+            let environment = EnvironmentValues()
+            let resolvedColor = color.resolve(in: environment)
+            let cgColor = resolvedColor.cgColor
+            let components = cgColor.components ?? []
+            
+            if components.count >= 4 {
+                self.init(
+                    red: components[0],
+                    green: components[1],
+                    blue: components[2],
+                    alpha: components[3]
+                )
+            } else if components.count >= 3 {
+                self.init(
+                    red: components[0],
+                    green: components[1],
+                    blue: components[2],
+                    alpha: 1.0
+                )
+            } else {
+                self.init(white: 0.5, alpha: 1.0)
+            }
+        } else {
+            // iOS 13 及以下版本的回退
+            self.init(white: 0.5, alpha: 1.0)
+        }
     }
 }
 

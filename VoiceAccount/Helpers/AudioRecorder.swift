@@ -15,9 +15,17 @@ class AudioRecorder: NSObject, ObservableObject {
     
     /// 请求录音权限
     func requestPermission(completion: @escaping (Bool) -> Void) {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            DispatchQueue.main.async {
-                completion(granted)
+        if #available(iOS 17.0, *) {
+            AVAudioApplication.requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    completion(granted)
+                }
+            }
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    completion(granted)
+                }
             }
         }
     }
@@ -25,7 +33,16 @@ class AudioRecorder: NSObject, ObservableObject {
     /// 开始录音
     func startRecording() {
         // 检查权限
-        guard AVAudioSession.sharedInstance().recordPermission == .granted else {
+        let hasPermission: Bool
+        if #available(iOS 17.0, *) {
+            // 在 iOS 17+ 中，使用 AVAudioApplication.shared.recordPermission
+            let permission = AVAudioApplication.shared.recordPermission
+            hasPermission = permission == .granted
+        } else {
+            hasPermission = AVAudioSession.sharedInstance().recordPermission == .granted
+        }
+        
+        guard hasPermission else {
             errorMessage = "需要麦克风权限才能录音"
             return
         }

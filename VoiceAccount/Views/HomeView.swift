@@ -165,7 +165,7 @@ struct HomeView: View {
 struct ExpenseRowView: View {
     let expense: Expense
     @ObservedObject var currencyManager: CurrencyManager
-    @StateObject private var categoryManager = CategoryManager()
+    @ObservedObject private var categoryManager = CategoryManager.shared
     
     var categoryItem: CategoryItem? {
         categoryManager.allCategories.first { $0.name == expense.category }
@@ -220,7 +220,8 @@ struct ExpenseRowView: View {
 struct ManualInputView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var categoryManager = CategoryManager()
+    @EnvironmentObject var themeManager: ThemeManager
+    @StateObject private var categoryManager = CategoryManager.shared
     
     @State private var amount = ""
     @State private var title = ""
@@ -230,15 +231,8 @@ struct ManualInputView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 1.0, green: 0.96, blue: 0.9),
-                        Color(red: 1.0, green: 0.88, blue: 0.7)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                // 主题背景
+                ThemedBackgroundView()
                 
                 VStack(spacing: 20) {
                     // Amount Input
@@ -248,10 +242,15 @@ struct ManualInputView: View {
                             .fontWeight(.medium)
                         TextField("0.00", text: $amount)
                             .keyboardType(.decimalPad)
-                            .textFieldStyle(.roundedBorder)
-                            .padding()
-                            .background(.white.opacity(0.5))
-                            .cornerRadius(12)
+                            .font(.system(size: 16))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            )
                     }
                     
                     // Title Input
@@ -260,10 +259,15 @@ struct ManualInputView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         TextField("例如：午餐、咖啡", text: $title)
-                            .textFieldStyle(.roundedBorder)
-                            .padding()
-                            .background(.white.opacity(0.5))
-                            .cornerRadius(12)
+                            .font(.system(size: 16))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            )
                     }
                     
                     // Category Picker
@@ -287,9 +291,14 @@ struct ManualInputView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .padding()
-                            .background(.white.opacity(0.5))
-                            .cornerRadius(12)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            )
                         }
                     }
                     
@@ -300,9 +309,14 @@ struct ManualInputView: View {
                             .fontWeight(.medium)
                         DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.compact)
-                            .padding()
-                            .background(.white.opacity(0.5))
-                            .cornerRadius(12)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            )
                     }
                     
                     Spacer()
