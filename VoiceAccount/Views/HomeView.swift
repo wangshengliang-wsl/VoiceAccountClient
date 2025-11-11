@@ -18,6 +18,8 @@ struct HomeView: View {
     @State private var showingVoiceInput = false
     @State private var uploadStatus: String = ""
     @State private var isUploading = false
+    @State private var isEditMode = false
+    @State private var selectedExpenses: Set<UUID> = []
     
     var todayExpenses: [Expense] {
         let calendar = Calendar.current
@@ -46,6 +48,17 @@ struct HomeView: View {
                         .font(.largeTitle)
                         .fontWeight(.bold)
                     Spacer()
+                    if !todayExpenses.isEmpty {
+                        Button(action: {
+                            withAnimation {
+                                isEditMode.toggle()
+                                selectedExpenses.removeAll()
+                            }
+                        }) {
+                            Text(isEditMode ? "完成" : "编辑")
+                                .fontWeight(.medium)
+                        }
+                    }
                 }
                 .padding()
                 .background(.ultraThinMaterial)
@@ -130,11 +143,23 @@ struct HomeView: View {
                         
                         // Today's Records
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("今日记录")
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal)
-                            
+                            HStack {
+                                Text("今日记录")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                if isEditMode && !selectedExpenses.isEmpty {
+                                    Button(role: .destructive, action: {
+                                        deleteSelectedExpenses()
+                                    }) {
+                                        Label("删除 \(selectedExpenses.count) 项", systemImage: "trash")
+                                            .font(.subheadline)
+                                            .foregroundColor(.red)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+
                             if todayExpenses.isEmpty {
                                 Text("今天还没有记录")
                                     .foregroundColor(.secondary)
@@ -142,8 +167,19 @@ struct HomeView: View {
                                     .padding()
                             } else {
                                 ForEach(todayExpenses) { expense in
-                                    ExpenseRowView(expense: expense, currencyManager: currencyManager)
-                                        .padding(.horizontal)
+                                    ExpenseRowView(
+                                        expense: expense,
+                                        currencyManager: currencyManager,
+                                        isEditMode: isEditMode,
+                                        isSelected: selectedExpenses.contains(expense.id),
+                                        onSelect: {
+                                            toggleSelection(expense)
+                                        },
+                                        onDelete: {
+                                            deleteExpense(expense)
+                                        }
+                                    )
+                                    .padding(.horizontal)
                                 }
                             }
                         }
@@ -160,27 +196,76 @@ struct HomeView: View {
             VoiceInputView(audioRecorder: audioRecorder, isUploading: $isUploading, uploadStatus: $uploadStatus)
         }
     }
+
+    private func toggleSelection(_ expense: Expense) {
+        if selectedExpenses.contains(expense.id) {
+            selectedExpenses.remove(expense.id)
+        } else {
+            selectedExpenses.insert(expense.id)
+        }
+    }
+
+    private func deleteExpense(_ expense: Expense) {
+        withAnimation {
+            modelContext.delete(expense)
+        }
+    }
+
+    private func deleteSelectedExpenses() {
+        withAnimation {
+            for expense in todayExpenses where selectedExpenses.contains(expense.id) {
+                modelContext.delete(expense)
+            }
+            selectedExpenses.removeAll()
+            isEditMode = false
+        }
+    }
 }
 
 struct ExpenseRowView: View {
     let expense: Expense
     @ObservedObject var currencyManager: CurrencyManager
     @ObservedObject private var categoryManager = CategoryManager.shared
-    
+    var isEditMode: Bool = false
+    var isSelected: Bool = false
+    var onSelect: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
+
+    @State private var showingEditView = false
+
     var categoryItem: CategoryItem? {
         categoryManager.allCategories.first { $0.name == expense.category }
     }
-    
+
     var displayIcon: String {
         categoryItem?.iconName ?? expense.expenseCategory.icon
     }
-    
+
     var displayColor: Color {
         categoryItem?.color ?? expense.expenseCategory.color
     }
-    
+
     var body: some View {
         HStack(spacing: 12) {
+            // Selection Circle in Edit Mode
+            if isEditMode {
+                Button(action: {
+                    onSelect?()
+                }) {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(isSelected ? Color.blue : Color.gray, lineWidth: 2)
+                            .frame(width: 24, height: 24)
+                        if isSelected {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 16, height: 16)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
             // Icon
             ZStack {
                 Circle()
@@ -189,7 +274,7 @@ struct ExpenseRowView: View {
                 Image(systemName: displayIcon)
                     .foregroundColor(displayColor)
             }
-            
+
             // Title and Time
             VStack(alignment: .leading, spacing: 4) {
                 Text(expense.title)
@@ -198,9 +283,9 @@ struct ExpenseRowView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             // Amount and Category
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(currencyManager.currentCurrency.symbol) \(expense.amount, specifier: "%.2f")")
@@ -214,6 +299,23 @@ struct ExpenseRowView: View {
         .background(.ultraThinMaterial)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 5)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isEditMode {
+                showingEditView = true
+            }
+        }
+        .sheet(isPresented: $showingEditView) {
+            ExpenseEditView(expense: expense)
+                .environmentObject(ThemeManager.shared)
+        }
+        .contextMenu {
+            if !isEditMode, let onDelete = onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("删除", systemImage: "trash")
+                }
+            }
+        }
     }
 }
 

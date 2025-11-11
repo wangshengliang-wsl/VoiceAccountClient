@@ -5,6 +5,7 @@ struct VoiceInputView: View {
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject var audioRecorder: AudioRecorder
+    @ObservedObject private var categoryManager = CategoryManager.shared
     @Binding var isUploading: Bool
     @Binding var uploadStatus: String
 
@@ -29,13 +30,6 @@ struct VoiceInputView: View {
                 ThemedBackgroundView()
 
                 VStack(spacing: 0) {
-                    // 点击开始录音提示
-                    Text(audioRecorder.isRecording ? "录音中..." : "点击开始录音")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.primary.opacity(0.8))
-                        .padding(.top, 40)
-                        .padding(.bottom, 60)
-
                     Spacer()
 
                     // 中央录音按钮或AI解析动画
@@ -141,6 +135,13 @@ struct VoiceInputView: View {
                         }
                         .disabled(isUploading || isParsingAudio)
                     }
+                    
+                    // 点击开始录音提示
+                    Text(audioRecorder.isRecording ? "录音中..." : "点击开始录音")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.primary.opacity(0.8))
+                        .padding(.top, 20)
+                        .padding(.bottom, 20)
 
                     Spacer()
 
@@ -288,8 +289,7 @@ struct VoiceInputView: View {
                     }
                 }
             }
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .alert("提示", isPresented: $showingAlert) {
                 Button("确定", role: .cancel) { }
             } message: {
@@ -386,8 +386,8 @@ struct VoiceInputView: View {
         isParsingAudio = true
         parsedItems = []
 
-        // 获取用户的分类列表（这里暂时使用默认分类）
-        let categories = ["餐饮", "交通", "购物", "娱乐", "日用", "房租", "水电", "其他"]
+        // 使用 CategoryManager 的分类列表
+        let categories = categoryManager.allCategories.map { $0.name }
 
         // 调用AI解析接口
         NetworkManager.shared.parseVoice(audioURL: audioURL, categories: categories) { result in

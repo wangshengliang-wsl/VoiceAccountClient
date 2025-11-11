@@ -14,6 +14,8 @@ struct HistoryView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var searchText = ""
+    @State private var isEditMode = false
+    @State private var selectedExpenses: Set<UUID> = []
     
     var filteredExpenses: [Expense] {
         if searchText.isEmpty {
@@ -21,7 +23,7 @@ struct HistoryView: View {
         } else {
             return expenses.filter { expense in
                 expense.title.localizedCaseInsensitiveContains(searchText) ||
-                expense.expenseCategory.rawValue.localizedCaseInsensitiveContains(searchText)
+                expense.category.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -51,9 +53,16 @@ struct HistoryView: View {
                         .font(.largeTitle)
                         .fontWeight(.bold)
                     Spacer()
-                    Button(action: {}) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.title2)
+                    if !filteredExpenses.isEmpty {
+                        Button(action: {
+                            withAnimation {
+                                isEditMode.toggle()
+                                selectedExpenses.removeAll()
+                            }
+                        }) {
+                            Text(isEditMode ? "完成" : "编辑")
+                                .fontWeight(.medium)
+                        }
                     }
                 }
                 .padding()
@@ -69,14 +78,18 @@ struct HistoryView: View {
                     .padding(12)
                     .background(.white.opacity(0.5))
                     .cornerRadius(12)
-                    
-                    Button(action: {}) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(.blue)
-                            .cornerRadius(12)
+
+                    if isEditMode && !selectedExpenses.isEmpty {
+                        Button(role: .destructive, action: {
+                            deleteSelectedExpenses()
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(.red)
+                                .cornerRadius(12)
+                        }
                     }
                 }
                 .padding()
@@ -100,14 +113,18 @@ struct HistoryView: View {
                                 Section {
                                     VStack(spacing: 12) {
                                         ForEach(group.expenses) { expense in
-                                            ExpenseRowView(expense: expense, currencyManager: currencyManager)
-                                                .contextMenu {
-                                                    Button(role: .destructive) {
-                                                        deleteExpense(expense)
-                                                    } label: {
-                                                        Label("删除", systemImage: "trash")
-                                                    }
+                                            ExpenseRowView(
+                                                expense: expense,
+                                                currencyManager: currencyManager,
+                                                isEditMode: isEditMode,
+                                                isSelected: selectedExpenses.contains(expense.id),
+                                                onSelect: {
+                                                    toggleSelection(expense)
+                                                },
+                                                onDelete: {
+                                                    deleteExpense(expense)
                                                 }
+                                            )
                                         }
                                     }
                                     .padding(.horizontal)
@@ -127,10 +144,28 @@ struct HistoryView: View {
             }
         }
     }
-    
+
+    private func toggleSelection(_ expense: Expense) {
+        if selectedExpenses.contains(expense.id) {
+            selectedExpenses.remove(expense.id)
+        } else {
+            selectedExpenses.insert(expense.id)
+        }
+    }
+
     private func deleteExpense(_ expense: Expense) {
         withAnimation {
             modelContext.delete(expense)
+        }
+    }
+
+    private func deleteSelectedExpenses() {
+        withAnimation {
+            for expense in filteredExpenses where selectedExpenses.contains(expense.id) {
+                modelContext.delete(expense)
+            }
+            selectedExpenses.removeAll()
+            isEditMode = false
         }
     }
 }

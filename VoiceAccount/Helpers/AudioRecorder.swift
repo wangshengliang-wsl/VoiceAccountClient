@@ -62,12 +62,14 @@ class AudioRecorder: NSObject, ObservableObject {
         let fileName = "recording_\(Date().timeIntervalSince1970).m4a"
         let audioFilename = documentsPath.appendingPathComponent(fileName)
         
-        // 配置录音设置
+        // 配置录音设置 - 优化语音识别质量
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44100.0,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            AVSampleRateKey: 16000.0,  // 16kHz 是语音识别的最佳采样率
+            AVNumberOfChannelsKey: 1,   // 单声道
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+            AVEncoderBitRateKey: 64000, // 64kbps 比特率,适合语音
+            AVLinearPCMBitDepthKey: 16  // 16位深度
         ]
         
         do {

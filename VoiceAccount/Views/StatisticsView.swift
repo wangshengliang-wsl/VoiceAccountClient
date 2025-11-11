@@ -13,15 +13,15 @@ import Combine
 struct StatisticsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
-    @StateObject private var categoryManager = CategoryManager()
+    @ObservedObject private var categoryManager = CategoryManager.shared
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var selectedPeriod: TimePeriod = .month
-    @State private var animateChart = false
     @State private var selectedBarIndex: Int? = nil
     @State private var selectedBarLabel: String? = nil
     @State private var selectedCategoryName: String? = nil
     @State private var hiddenCategories: Set<String> = []
+    @State private var hasInitializedSelection = false
     
     enum TimePeriod: String, CaseIterable {
         case month = "月"
@@ -35,52 +35,286 @@ struct StatisticsView: View {
         if let index = selectedBarIndex, index < trendData.count {
             return trendData[index].amount
         }
-        // 默认显示当前月的数据
+        // 默认显示当前时间段的数据
         let calendar = Calendar.current
         let now = Date()
-        let monthExpenses = expenses.filter {
-            calendar.isDate($0.date, equalTo: now, toGranularity: .month)
+
+        switch selectedPeriod {
+        case .month:
+            let monthExpenses = expenses.filter {
+                calendar.isDate($0.date, equalTo: now, toGranularity: .month)
+            }
+            return monthExpenses.reduce(0) { $0 + $1.amount }
+
+        case .quarter:
+            // 获取当前季度的起止日期
+            let currentMonth = calendar.component(.month, from: now)
+            let quarterStartMonth = ((currentMonth - 1) / 3) * 3 + 1
+            let startComponents = DateComponents(year: calendar.component(.year, from: now), month: quarterStartMonth)
+            if let startOfQuarter = calendar.date(from: startComponents),
+               let endOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: startOfQuarter) {
+                let quarterExpenses = expenses.filter { expense in
+                    expense.date >= startOfQuarter && expense.date <= endOfQuarter
+                }
+                return quarterExpenses.reduce(0) { $0 + $1.amount }
+            }
+            return 0
+
+        case .year:
+            let yearExpenses = expenses.filter {
+                calendar.isDate($0.date, equalTo: now, toGranularity: .year)
+            }
+            return yearExpenses.reduce(0) { $0 + $1.amount }
         }
-        return monthExpenses.reduce(0) { $0 + $1.amount }
     }
-    
+
     // 根据选中的柱子计算日均支出
     var displayDailyAverage: Double {
+        guard let index = selectedBarIndex else { return 0 }
         let trendData = getTrendData()
-        if let index = selectedBarIndex, index < trendData.count {
-            let amount = trendData[index].amount
-            switch selectedPeriod {
-            case .month:
-                // 月度：除以30天
-                return amount / 30.0
-            case .quarter:
-                // 季度：除以90天
-                return amount / 90.0
-            case .year:
-                // 年度：除以365天
-                return amount / 365.0
-            }
-        }
-        // 默认显示当前月的日均
+        guard index < trendData.count else { return 0 }
+
+        let amount = trendData[index].amount
         let calendar = Calendar.current
         let now = Date()
-        let monthExpenses = expenses.filter {
-            calendar.isDate($0.date, equalTo: now, toGranularity: .month)
+
+        switch selectedPeriod {
+        case .month:
+            // 月度：使用选中月份的实际天数
+            let currentYear = calendar.component(.year, from: now)
+            let selectedMonth = index + 1  // 月视图：索引0-11对应1-12月
+            let dateComponents = DateComponents(calendar: calendar, year: currentYear, month: selectedMonth)
+            if let monthDate = calendar.date(from: dateComponents) {
+                let daysInMonth = calendar.range(of: .day, in: .month, for: monthDate)?.count ?? 30
+                return amount / Double(daysInMonth)
+            }
+            return amount / 30.0
+
+        case .quarter:
+            // 季度：数组是reversed的，索引0-3对应最早到最近的季度
+            // 计算该季度的实际天数
+            let quarterOffset = 3 - index  // 将索引转换为偏移量
+            if let date = calendar.date(byAdding: .month, value: -quarterOffset * 3, to: now),
+               let startOfQuarter = calendar.date(from: calendar.dateComponents([.year, .month], from: date)),
+               let endOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: startOfQuarter) {
+                let days = calendar.dateComponents([.day], from: startOfQuarter, to: endOfQuarter).day ?? 90
+                return amount / Double(days + 1)  // +1因为包含结束日
+            }
+            return amount / 90.0
+
+        case .year:
+            // 年度：数组是reversed的，索引0-4对应最早到最近的年份
+            let yearOffset = 4 - index  // 将索引转换为偏移量
+            if let date = calendar.date(byAdding: .year, value: -yearOffset, to: now) {
+                let daysInYear = calendar.range(of: .day, in: .year, for: date)?.count ?? 365
+                return amount / Double(daysInYear)
+            }
+            return amount / 365.0
         }
-        let days = calendar.component(.day, from: now)
-        return days > 0 ? monthExpenses.reduce(0) { $0 + $1.amount } / Double(days) : 0
     }
     
     // 根据时间段返回总支出的标题
     var totalLabel: String {
+        guard let index = selectedBarIndex else {
+            switch selectedPeriod {
+            case .month:
+                return "月支出"
+            case .quarter:
+                return "季度支出"
+            case .year:
+                return "年支出"
+            }
+        }
+
+        let calendar = Calendar.current
+        let now = Date()
+
         switch selectedPeriod {
         case .month:
-            return "本月支出"
+            let selectedMonth = index + 1
+            return "\(selectedMonth)月支出"
+
         case .quarter:
-            return "本季支出"
+            let quarterOffset = 3 - index
+            if let date = calendar.date(byAdding: .month, value: -quarterOffset * 3, to: now) {
+                let quarter = (calendar.component(.month, from: date) - 1) / 3 + 1
+                let year = calendar.component(.year, from: date)
+                return "\(year)年Q\(quarter)支出"
+            }
+            return "季度支出"
+
         case .year:
-            return "本年支出"
+            let yearOffset = 4 - index
+            if let date = calendar.date(byAdding: .year, value: -yearOffset, to: now) {
+                let year = calendar.component(.year, from: date)
+                return "\(year)年支出"
+            }
+            return "年支出"
         }
+    }
+
+    // 计算总支出相比上一时间段的变化百分比
+    var totalChangePercentage: (value: Double, isIncrease: Bool, isFlat: Bool)? {
+        let trendData = getTrendData()
+
+        // 确定当前选中的柱子
+        let currentIndex: Int
+        let currentTotal: Double
+
+        if let index = selectedBarIndex, index < trendData.count {
+            // 如果选中了柱子,使用选中柱子的数据
+            currentIndex = index
+            currentTotal = trendData[index].amount
+        } else {
+            // 未选中时返回nil,不显示趋势
+            return nil
+        }
+
+        // 获取上一期的数据
+        let previousIndex = currentIndex - 1
+        if previousIndex < 0 || previousIndex >= trendData.count {
+            return nil
+        }
+
+        let previousTotal = trendData[previousIndex].amount
+
+        // 如果都是0,显示持平
+        if currentTotal == 0 && previousTotal == 0 {
+            return (0, false, true)
+        }
+
+        // 如果上一期为0但当前期有值,显示上升100%
+        if previousTotal == 0 && currentTotal > 0 {
+            return (100.0, true, false)
+        }
+
+        // 如果当前期为0但上一期有值,显示下降100%
+        if currentTotal == 0 && previousTotal > 0 {
+            return (100.0, false, false)
+        }
+
+        let change = ((currentTotal - previousTotal) / previousTotal) * 100
+
+        // 判断是否持平 (变化小于0.5%)
+        if abs(change) < 0.5 {
+            return (0, false, true)
+        }
+
+        return (abs(change), change > 0, false)
+    }
+
+    // 计算日均支出相比上一时间段的变化百分比
+    var dailyAverageChangePercentage: (value: Double, isIncrease: Bool, isFlat: Bool)? {
+        let calendar = Calendar.current
+        let now = Date()
+        let trendData = getTrendData()
+
+        // 确定当前选中的柱子
+        guard let currentIndex = selectedBarIndex, currentIndex < trendData.count else {
+            return nil
+        }
+
+        let currentAmount = trendData[currentIndex].amount
+        let currentAverage: Double
+
+        switch selectedPeriod {
+        case .month:
+            let currentYear = calendar.component(.year, from: now)
+            let selectedMonth = currentIndex + 1
+            let dateComponents = DateComponents(calendar: calendar, year: currentYear, month: selectedMonth)
+            if let monthDate = calendar.date(from: dateComponents) {
+                let daysInMonth = calendar.range(of: .day, in: .month, for: monthDate)?.count ?? 30
+                currentAverage = currentAmount / Double(daysInMonth)
+            } else {
+                currentAverage = currentAmount / 30.0
+            }
+
+        case .quarter:
+            let quarterOffset = 3 - currentIndex
+            if let date = calendar.date(byAdding: .month, value: -quarterOffset * 3, to: now),
+               let startOfQuarter = calendar.date(from: calendar.dateComponents([.year, .month], from: date)),
+               let endOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: startOfQuarter) {
+                let days = calendar.dateComponents([.day], from: startOfQuarter, to: endOfQuarter).day ?? 90
+                currentAverage = currentAmount / Double(days + 1)
+            } else {
+                currentAverage = currentAmount / 90.0
+            }
+
+        case .year:
+            let yearOffset = 4 - currentIndex
+            if let date = calendar.date(byAdding: .year, value: -yearOffset, to: now) {
+                let daysInYear = calendar.range(of: .day, in: .year, for: date)?.count ?? 365
+                currentAverage = currentAmount / Double(daysInYear)
+            } else {
+                currentAverage = currentAmount / 365.0
+            }
+        }
+
+        // 获取上一期的数据
+        let previousIndex = currentIndex - 1
+        if previousIndex < 0 || previousIndex >= trendData.count {
+            return nil
+        }
+
+        let previousAmount = trendData[previousIndex].amount
+        let previousAverage: Double
+
+        switch selectedPeriod {
+        case .month:
+            let currentYear = calendar.component(.year, from: now)
+            let selectedMonth = previousIndex + 1
+            let dateComponents = DateComponents(calendar: calendar, year: currentYear, month: selectedMonth)
+            if let monthDate = calendar.date(from: dateComponents) {
+                let daysInMonth = calendar.range(of: .day, in: .month, for: monthDate)?.count ?? 30
+                previousAverage = previousAmount / Double(daysInMonth)
+            } else {
+                previousAverage = previousAmount / 30.0
+            }
+
+        case .quarter:
+            let quarterOffset = 3 - previousIndex
+            if let date = calendar.date(byAdding: .month, value: -quarterOffset * 3, to: now),
+               let startOfQuarter = calendar.date(from: calendar.dateComponents([.year, .month], from: date)),
+               let endOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: startOfQuarter) {
+                let days = calendar.dateComponents([.day], from: startOfQuarter, to: endOfQuarter).day ?? 90
+                previousAverage = previousAmount / Double(days + 1)
+            } else {
+                previousAverage = previousAmount / 90.0
+            }
+
+        case .year:
+            let yearOffset = 4 - previousIndex
+            if let date = calendar.date(byAdding: .year, value: -yearOffset, to: now) {
+                let daysInYear = calendar.range(of: .day, in: .year, for: date)?.count ?? 365
+                previousAverage = previousAmount / Double(daysInYear)
+            } else {
+                previousAverage = previousAmount / 365.0
+            }
+        }
+
+        // 如果都是0,显示持平
+        if currentAverage == 0 && previousAverage == 0 {
+            return (0, false, true)
+        }
+
+        // 如果上一期为0但当前期有值,显示上升100%
+        if previousAverage == 0 && currentAverage > 0 {
+            return (100.0, true, false)
+        }
+
+        // 如果当前期为0但上一期有值,显示下降100%
+        if currentAverage == 0 && previousAverage > 0 {
+            return (100.0, false, false)
+        }
+
+        let change = ((currentAverage - previousAverage) / previousAverage) * 100
+
+        // 判断是否持平 (变化小于0.5%)
+        if abs(change) < 0.5 {
+            return (0, false, true)
+        }
+
+        return (abs(change), change > 0, false)
     }
     
     var categoryTotals: [(name: String, total: Double, percentage: Double, iconName: String, color: Color)] {
@@ -171,8 +405,11 @@ struct StatisticsView: View {
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                animateChart = true
+            // 默认选中当前时间段
+            if !hasInitializedSelection {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    setDefaultSelection()
+                }
             }
         }
     }
@@ -210,88 +447,90 @@ struct StatisticsView: View {
         .pickerStyle(.segmented)
         .padding(.horizontal)
         .onChange(of: selectedPeriod) { oldValue, newValue in
-            selectedBarIndex = nil
-            selectedBarLabel = nil
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                animateChart.toggle()
+            // 使用平滑的淡出-淡入动画,而不是柱子的缩放动画
+            withAnimation(.easeInOut(duration: 0.25)) {
+                selectedBarIndex = nil
+                selectedBarLabel = nil
+            }
+
+            // 延迟选中当前期,让数据有时间更新
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                setDefaultSelection()
             }
         }
     }
     
     private var summaryCards: some View {
-                        HStack(spacing: 12) {
-                            // Total
-                            VStack(spacing: 8) {
-                                Text("\(currencyManager.currentCurrency.symbol) \(Int(displayTotal))")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .id("total-\(selectedBarIndex?.description ?? "none")")
-                                Text(totalLabel)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                if selectedBarIndex != nil {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.caption)
-                                        Text("已选中")
-                                            .font(.caption)
-                                    }
-                                    .foregroundColor(.blue)
-                                    .transition(.scale.combined(with: .opacity))
-                                } else {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.down")
-                                            .font(.caption)
-                                        Text("8.5%")
-                                            .font(.caption)
-                                    }
-                                    .foregroundColor(.green)
-                                    .transition(.scale.combined(with: .opacity))
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(20)
-                            .shadow(color: .black.opacity(0.1), radius: 10)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: selectedBarIndex)
-                            
-                            // Daily Average
-                            VStack(spacing: 8) {
-                                Text("\(currencyManager.currentCurrency.symbol) \(Int(displayDailyAverage))")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .id("average-\(selectedBarIndex?.description ?? "none")")
-                                Text("日均支出")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                if selectedBarIndex != nil {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "info.circle.fill")
-                                            .font(.caption)
-                                        Text("平均值")
-                                            .font(.caption)
-                                    }
-                                    .foregroundColor(.blue)
-                                    .transition(.scale.combined(with: .opacity))
-                                } else {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.up")
-                                            .font(.caption)
-                                        Text("12.3%")
-                                            .font(.caption)
-                                    }
-                                    .foregroundColor(.red)
-                                    .transition(.scale.combined(with: .opacity))
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(20)
-                            .shadow(color: .black.opacity(0.1), radius: 10)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: selectedBarIndex)
+        HStack(spacing: 12) {
+            // Total
+            VStack(spacing: 8) {
+                Text("\(currencyManager.currentCurrency.symbol) \(Int(displayTotal))")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .contentTransition(.numericText())
+                Text(totalLabel)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                if let change = totalChangePercentage {
+                    HStack(spacing: 4) {
+                        if change.isFlat {
+                            Image(systemName: "equal")
+                                .font(.caption)
+                            Text("持平")
+                                .font(.caption)
+                        } else {
+                            Image(systemName: change.isIncrease ? "arrow.up" : "arrow.down")
+                                .font(.caption)
+                            Text("\(change.value, specifier: "%.1f")%")
+                                .font(.caption)
+                        }
+                    }
+                    .foregroundColor(change.isFlat ? .gray : (change.isIncrease ? .red : .green))
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(.ultraThinMaterial)
+            .cornerRadius(20)
+            .shadow(color: .black.opacity(0.1), radius: 10)
+
+            // Daily Average
+            VStack(spacing: 8) {
+                Text("\(currencyManager.currentCurrency.symbol) \(displayDailyAverage, specifier: "%.2f")")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .contentTransition(.numericText())
+                Text("日均支出")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                if let change = dailyAverageChangePercentage {
+                    HStack(spacing: 4) {
+                        if change.isFlat {
+                            Image(systemName: "equal")
+                                .font(.caption)
+                            Text("持平")
+                                .font(.caption)
+                        } else {
+                            Image(systemName: change.isIncrease ? "arrow.up" : "arrow.down")
+                                .font(.caption)
+                            Text("\(change.value, specifier: "%.1f")%")
+                                .font(.caption)
+                        }
+                    }
+                    .foregroundColor(change.isFlat ? .gray : (change.isIncrease ? .red : .green))
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(.ultraThinMaterial)
+            .cornerRadius(20)
+            .shadow(color: .black.opacity(0.1), radius: 10)
         }
+        .animation(.easeInOut(duration: 0.3), value: selectedBarIndex)
+        .animation(.easeInOut(duration: 0.3), value: displayTotal)
+        .animation(.easeInOut(duration: 0.3), value: displayDailyAverage)
         .padding(.horizontal)
     }
     
@@ -301,50 +540,27 @@ struct StatisticsView: View {
                                 Text("支出趋势")
                                     .font(.headline)
                                 Spacer()
-                                if selectedBarIndex != nil {
-                                    Button(action: {
-                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                                            selectedBarIndex = nil
-                                            selectedBarLabel = nil
-                                        }
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "xmark.circle.fill")
-                                            Text("清除选择")
-                                                .font(.caption)
-                                        }
-                                        .foregroundColor(.blue)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(20)
-                                    }
-                                    .transition(.scale.combined(with: .opacity))
-                                } else {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "hand.tap.fill")
-                                            .font(.caption)
-                                        Text("点击柱子查看详情")
-                                            .font(.caption)
-                                    }
-                                    .foregroundColor(.secondary)
-                                    .transition(.scale.combined(with: .opacity))
+                                HStack(spacing: 4) {
+                                    Image(systemName: "hand.tap.fill")
+                                        .font(.caption)
+                                    Text("点击切换柱子")
+                                        .font(.caption)
                                 }
+                                .foregroundColor(.secondary)
                             }
-                            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: selectedBarIndex)
                             
                             if #available(iOS 16.0, *) {
                                 let data = getTrendData()
                                 let maxAmount = data.map { $0.amount }.max() ?? 100
                                 // 计算是否显示数字的阈值（显示金额大于最大值20%的柱子）
                                 let displayThreshold = maxAmount * 0.2
-                                
+
                                 GeometryReader { geometry in
                                     Chart {
                                         ForEach(Array(data.enumerated()), id: \.offset) { index, item in
                                             BarMark(
                                                 x: .value("时间", item.label),
-                                                y: .value("金额", animateChart ? item.amount : 0)
+                                                y: .value("金额", item.amount)
                                             )
                                             .foregroundStyle(
                                                 LinearGradient(
@@ -357,7 +573,7 @@ struct StatisticsView: View {
                                             .cornerRadius(8)
                                             .annotation(position: .top, alignment: .center, spacing: 4) {
                                                 // 智能显示数字：选中的柱子或金额较大的柱子才显示
-                                                let shouldShowLabel = selectedBarIndex == index || 
+                                                let shouldShowLabel = selectedBarIndex == index ||
                                                                      (selectedBarIndex == nil && item.amount >= displayThreshold)
                                                 if item.amount > 0 && shouldShowLabel {
                                                     Text("\(Int(item.amount))")
@@ -399,14 +615,10 @@ struct StatisticsView: View {
                                             let barWidth = chartWidth / CGFloat(data.count)
                                             let tappedIndex = Int(adjustedX / barWidth)
 
-                                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                                 if tappedIndex >= 0 && tappedIndex < data.count {
-                                                    if selectedBarIndex == tappedIndex {
-                                                        // 点击已选中的柱子则取消选中
-                                                        selectedBarIndex = nil
-                                                        selectedBarLabel = nil
-                                                    } else {
-                                                        // 选中新的柱子
+                                                    // 单选模式：只切换到新柱子,不取消选中
+                                                    if selectedBarIndex != tappedIndex {
                                                         selectedBarIndex = tappedIndex
                                                         selectedBarLabel = data[tappedIndex].label
                                                     }
@@ -414,10 +626,13 @@ struct StatisticsView: View {
                                             }
                                         }
                                     }
-                                    .animation(.spring(response: 0.6, dampingFraction: 0.7), value: animateChart)
-                                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: selectedBarIndex)
+                                    // 使用单一的平滑动画
+                                    .animation(.easeInOut(duration: 0.3), value: selectedBarIndex)
+                                    .animation(.easeInOut(duration: 0.3), value: selectedPeriod)
                                 }
                                 .frame(height: 200)
+                                // 添加ID来确保切换时间段时视图重新创建
+                                .id(selectedPeriod)
                             } else {
                                 Text("需要 iOS 16+ 支持图表功能")
                                     .foregroundColor(.secondary)
@@ -623,7 +838,7 @@ struct StatisticsView: View {
     private func getTrendData() -> [(label: String, amount: Double)] {
         let calendar = Calendar.current
         let now = Date()
-        
+
         switch selectedPeriod {
         case .month:
             // 显示1-12月的数据（使用公历）
@@ -634,52 +849,82 @@ struct StatisticsView: View {
                 guard let monthDate = calendar.date(from: dateComponents) else {
                     return ("\(month)月", 0.0)
                 }
-                
+
                 let monthExpenses = expenses.filter {
                     calendar.isDate($0.date, equalTo: monthDate, toGranularity: .month)
                 }
-                
+
                 let total = monthExpenses.reduce(0) { $0 + $1.amount }
-                
+
                 return ("\(month)月", total)
             }
-            
+
         case .quarter:
             // 最近4个季度
             return (0..<4).map { quarterOffset in
                 guard let date = calendar.date(byAdding: .month, value: -quarterOffset * 3, to: now) else {
                     return ("Q\(quarterOffset + 1)", 0.0)
                 }
-                
+
                 let startOfQuarter = calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
                 let endOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: startOfQuarter)!
-                
+
                 let quarterExpenses = expenses.filter { expense in
                     expense.date >= startOfQuarter && expense.date <= endOfQuarter
                 }
-                
+
                 let total = quarterExpenses.reduce(0) { $0 + $1.amount }
                 let quarter = (calendar.component(.month, from: date) - 1) / 3 + 1
-                
+
                 return ("Q\(quarter)", total)
             }.reversed()
-            
+
         case .year:
             // 最近5年
             return (0..<5).map { yearOffset in
                 guard let date = calendar.date(byAdding: .year, value: -yearOffset, to: now) else {
                     return ("", 0.0)
                 }
-                
+
                 let yearExpenses = expenses.filter {
                     calendar.isDate($0.date, equalTo: date, toGranularity: .year)
                 }
-                
+
                 let total = yearExpenses.reduce(0) { $0 + $1.amount }
                 let year = calendar.component(.year, from: date)
-                
+
                 return ("\(year)", total)
             }.reversed()
+        }
+    }
+
+    // 设置默认选中当前月/季/年
+    private func setDefaultSelection() {
+        hasInitializedSelection = true
+        let calendar = Calendar.current
+        let now = Date()
+
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            switch selectedPeriod {
+            case .month:
+                // 选中当前月份（1-12）
+                let currentMonth = calendar.component(.month, from: now)
+                selectedBarIndex = currentMonth - 1  // 转换为0-based索引
+                selectedBarLabel = "\(currentMonth)月"
+
+            case .quarter:
+                // 选中当前季度（最近4个季度中的最后一个，即当前季度）
+                selectedBarIndex = 3  // 数组reversed后,当前季度在索引3
+                let currentMonth = calendar.component(.month, from: now)
+                let quarter = (currentMonth - 1) / 3 + 1
+                selectedBarLabel = "Q\(quarter)"
+
+            case .year:
+                // 选中当前年份（最近5年中的最后一个，即今年）
+                selectedBarIndex = 4  // 数组reversed后,今年在索引4
+                let currentYear = calendar.component(.year, from: now)
+                selectedBarLabel = "\(currentYear)"
+            }
         }
     }
 }
