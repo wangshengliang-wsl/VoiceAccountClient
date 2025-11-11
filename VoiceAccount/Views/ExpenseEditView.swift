@@ -53,19 +53,40 @@ struct ExpenseEditView: View {
                             }
                         }
 
-                        // 分类
-                        Picker("分类", selection: $selectedCategory) {
-                            ForEach(categoryManager.allCategories, id: \.name) { category in
-                                HStack {
-                                    Image(systemName: category.iconName)
-                                    Text(category.name)
-                                }
-                                .tag(category.name)
-                            }
-                        }
-
                         // 日期
                         DatePicker("日期", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                    }
+                    .listRowBackground(Color.clear)
+
+                    Section(header: Text("分类")) {
+                        // 使用 LazyVGrid 平铺展示分类
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 12)], spacing: 12) {
+                            ForEach(categoryManager.allCategories, id: \.name) { category in
+                                Button(action: {
+                                    selectedCategory = category.name
+                                }) {
+                                    VStack(spacing: 6) {
+                                        // 圆形图标背景
+                                        ZStack {
+                                            Circle()
+                                                .fill(selectedCategory == category.name ? category.color : category.color.opacity(0.15))
+                                                .frame(width: 50, height: 50)
+                                            Image(systemName: category.iconName)
+                                                .font(.system(size: 24))
+                                                .foregroundColor(selectedCategory == category.name ? .white : category.color)
+                                        }
+                                        Text(category.name)
+                                            .font(.caption)
+                                            .fontWeight(selectedCategory == category.name ? .semibold : .regular)
+                                            .foregroundColor(.primary)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 8)
                     }
                     .listRowBackground(Color.clear)
 
@@ -76,6 +97,8 @@ struct ExpenseEditView: View {
                     .listRowBackground(Color.clear)
                 }
                 .scrollContentBackground(.hidden)
+                .dismissKeyboardOnScroll()
+                .dismissKeyboardOnTap()
             }
             .navigationTitle("编辑记录")
             .navigationBarTitleDisplayMode(.inline)

@@ -60,8 +60,9 @@ struct HistoryView: View {
                                 selectedExpenses.removeAll()
                             }
                         }) {
-                            Text(isEditMode ? "完成" : "编辑")
+                            Text(isEditMode ? "取消" : "批量删除")
                                 .fontWeight(.medium)
+                                .foregroundColor(isEditMode ? .primary : .red)
                         }
                     }
                 }
@@ -69,7 +70,7 @@ struct HistoryView: View {
                 .background(.ultraThinMaterial)
                 
                 // Search Bar
-                HStack {
+                HStack(spacing: 12) {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.secondary)
@@ -78,6 +79,7 @@ struct HistoryView: View {
                     .padding(12)
                     .background(.white.opacity(0.5))
                     .cornerRadius(12)
+                    .frame(maxWidth: .infinity)
 
                     if isEditMode && !selectedExpenses.isEmpty {
                         Button(role: .destructive, action: {
@@ -86,14 +88,17 @@ struct HistoryView: View {
                             Image(systemName: "trash")
                                 .font(.title2)
                                 .foregroundColor(.white)
-                                .padding(12)
+                                .frame(width: 48, height: 48)
                                 .background(.red)
                                 .cornerRadius(12)
                         }
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding()
                 .background(.ultraThinMaterial)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isEditMode)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedExpenses.count)
                 
                 // History List
                 if groupedExpenses.isEmpty {
@@ -106,6 +111,7 @@ struct HistoryView: View {
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .dismissKeyboardOnTap()
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -140,6 +146,7 @@ struct HistoryView: View {
                         }
                         .padding(.bottom, 20)
                     }
+                    .dismissKeyboardOnScroll()
                 }
             }
         }

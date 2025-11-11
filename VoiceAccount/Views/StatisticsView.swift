@@ -473,6 +473,13 @@ struct StatisticsView: View {
                     .foregroundColor(.secondary)
                 if let change = totalChangePercentage {
                     HStack(spacing: 4) {
+                        // 持平时不显示比较文案前缀
+                        if !change.isFlat {
+                            Text(getPeriodComparisonPrefix())
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
                         if change.isFlat {
                             Image(systemName: "equal")
                                 .font(.caption)
@@ -506,6 +513,13 @@ struct StatisticsView: View {
                     .foregroundColor(.secondary)
                 if let change = dailyAverageChangePercentage {
                     HStack(spacing: 4) {
+                        // 持平时不显示比较文案前缀
+                        if !change.isFlat {
+                            Text(getPeriodComparisonPrefix())
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
                         if change.isFlat {
                             Image(systemName: "equal")
                                 .font(.caption)
@@ -834,7 +848,19 @@ struct StatisticsView: View {
             }
         }
     }
-    
+
+    // 获取时间段比较的文案前缀
+    private func getPeriodComparisonPrefix() -> String {
+        switch selectedPeriod {
+        case .month:
+            return "较上月"
+        case .quarter:
+            return "较上季"
+        case .year:
+            return "较上年"
+        }
+    }
+
     private func getTrendData() -> [(label: String, amount: Double)] {
         let calendar = Calendar.current
         let now = Date()

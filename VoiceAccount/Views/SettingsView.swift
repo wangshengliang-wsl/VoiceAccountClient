@@ -12,15 +12,13 @@ import Combine
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var expenses: [Expense]
-    @StateObject private var categoryManager = CategoryManager()
+    @ObservedObject private var categoryManager = CategoryManager.shared
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @ObservedObject private var themeManager = ThemeManager.shared
-    
+
     @State private var showingCurrencyPicker = false
     @State private var showingCategoryManager = false
     @State private var showingClearDataAlert = false
-    @State private var showingShareSheet = false
-    @State private var shareURL: URL?
     @State private var exportMessage = ""
     @State private var showingExportAlert = false
     @State private var showingPrivacyPolicy = false
@@ -328,16 +326,6 @@ struct SettingsView: View {
         .sheet(isPresented: $showingUserAgreement) {
             UserAgreementView()
         }
-        .sheet(isPresented: $showingShareSheet, onDismiss: {
-            if let url = shareURL {
-                try? FileManager.default.removeItem(at: url)
-                shareURL = nil
-            }
-        }) {
-            if let url = shareURL {
-                ShareSheet(items: [url])
-            }
-        }
         .alert("数据导出", isPresented: $showingExportAlert) {
             Button("确定", role: .cancel) {}
         } message: {
@@ -354,22 +342,94 @@ struct SettingsView: View {
     }
     
     private func exportData() {
+        print("📤 开始导出数据...")
+        print("📊 待导出记录数: \(expenses.count)")
+
         if expenses.isEmpty {
             exportMessage = "没有数据可以导出"
             showingExportAlert = true
             return
         }
-        
+
         guard let url = CSVExporter.exportExpenses(expenses) else {
+            print("❌ CSVExporter 返回 nil")
             exportMessage = "导出失败，请重试"
             showingExportAlert = true
             return
         }
-        
-        shareURL = url
-        showingShareSheet = true
+
+        // 获取文件路径字符串用于日志输出
+        let urlPathString: String
+        if #available(iOS 16.0, *) {
+            urlPathString = url.path()
+        } else {
+            urlPathString = url.path
+        }
+
+        print("✅ CSV文件创建成功: \(urlPathString)")
+
+        // 获取文件大小 (使用URL对象的path属性)
+        do {
+            let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 ?? 0
+            print("📁 文件大小: \(fileSize) bytes")
+        } catch {
+            print("⚠️ 无法获取文件大小: \(error.localizedDescription)")
+        }
+
+        // 直接显示分享界面
+        print("🔄 准备显示分享界面...")
+        showShareSheet(url: url)
     }
-    
+
+    private func showShareSheet(url: URL) {
+        print("📋 获取窗口场景...")
+
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first,
+              let rootViewController = window.rootViewController else {
+            print("❌ 无法获取根视图控制器")
+            return
+        }
+
+        print("📋 创建 UIActivityViewController")
+        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+
+        // 设置完成回调
+        activityVC.completionWithItemsHandler = { (activityType, completed, returnedItems, error) in
+            if let error = error {
+                print("❌ 分享出错: \(error.localizedDescription)")
+            } else if completed {
+                print("✅ 分享成功: \(activityType?.rawValue ?? "unknown")")
+            } else {
+                print("⚠️ 用户取消了分享")
+            }
+
+            // 清理临时文件
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                print("🗑️ 清理临时文件...")
+                try? FileManager.default.removeItem(at: url)
+                print("✅ 临时文件已清理")
+            }
+        }
+
+        // 在iPad上配置popover
+        if let popover = activityVC.popoverPresentationController {
+            popover.sourceView = rootViewController.view
+            popover.sourceRect = CGRect(
+                x: rootViewController.view.bounds.midX,
+                y: rootViewController.view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
+
+        print("📋 显示分享界面...")
+        rootViewController.present(activityVC, animated: true) {
+            print("✅ 分享界面已显示")
+        }
+    }
+
     private func clearAllData() {
         for expense in expenses {
             modelContext.delete(expense)
@@ -477,6 +537,8 @@ struct CategoryManagerView: View {
     @ObservedObject var categoryManager: CategoryManager
     @State private var showingAddEdit = false
     @State private var editingCategory: CategoryItem?
+    @State private var isEditMode = false
+    @State private var selectedCategories: Set<UUID> = []
     
     var body: some View {
         NavigationView {
@@ -494,24 +556,57 @@ struct CategoryManagerView: View {
                 List {
                     Section("所有分类（\(categoryManager.allCategories.count)个）") {
                         ForEach(categoryManager.allCategories) { category in
-                            CategoryRowView(
-                                iconName: category.iconName,
-                                name: category.name,
-                                color: category.color,
-                                backgroundColor: category.backgroundColor,
-                                isBuiltIn: category.isBuiltIn,
-                                onEdit: {
-                                    editingCategory = category
-                                    showingAddEdit = true
+                            HStack(spacing: 12) {
+                                // 批量删除模式下显示复选框
+                                if isEditMode {
+                                    Button(action: {
+                                        toggleSelection(category)
+                                    }) {
+                                        Image(systemName: selectedCategories.contains(category.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(selectedCategories.contains(category.id) ? .blue : .gray)
+                                            .font(.title3)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                            )
-                        }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                let category = categoryManager.allCategories[index]
-                                categoryManager.deleteCategory(category)
+
+                                CategoryRowView(
+                                    iconName: category.iconName,
+                                    name: category.name,
+                                    color: category.color,
+                                    backgroundColor: category.backgroundColor,
+                                    isBuiltIn: category.isBuiltIn,
+                                    onEdit: {
+                                        editingCategory = category
+                                        showingAddEdit = true
+                                    }
+                                )
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if isEditMode {
+                                    toggleSelection(category)
+                                }
                             }
                         }
+                    }
+
+                    // 添加分类按钮（列表底部）
+                    Section {
+                        Button(action: {
+                            editingCategory = nil
+                            showingAddEdit = true
+                        }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                                Text("添加新分类")
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .disabled(isEditMode)
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -519,21 +614,49 @@ struct CategoryManagerView: View {
             .navigationTitle("分类管理")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: {
-                        editingCategory = nil
-                        showingAddEdit = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                }
+                // 左上角：批量删除/取消按钮
                 ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
+                    if isEditMode {
+                        Button(action: {
+                            withAnimation {
+                                isEditMode = false
+                                selectedCategories.removeAll()
+                            }
+                        }) {
+                            Text("取消")
+                                .foregroundColor(.primary)
+                        }
+                    } else {
+                        Button(action: {
+                            withAnimation {
+                                isEditMode = true
+                            }
+                        }) {
+                            Text("批量删除")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+
+                // 右上角：关闭按钮
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                    }
+                }
+
+                // 底部：删除确认按钮
+                if isEditMode && !selectedCategories.isEmpty {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button(role: .destructive, action: {
+                            deleteSelectedCategories()
+                        }) {
+                            Text("删除选中的 \(selectedCategories.count) 个分类")
+                                .foregroundColor(.red)
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showingAddEdit) {
@@ -542,6 +665,24 @@ struct CategoryManagerView: View {
                     categoryManager: categoryManager
                 )
             }
+        }
+    }
+
+    private func toggleSelection(_ category: CategoryItem) {
+        if selectedCategories.contains(category.id) {
+            selectedCategories.remove(category.id)
+        } else {
+            selectedCategories.insert(category.id)
+        }
+    }
+
+    private func deleteSelectedCategories() {
+        withAnimation {
+            for category in categoryManager.allCategories where selectedCategories.contains(category.id) {
+                categoryManager.deleteCategory(category)
+            }
+            selectedCategories.removeAll()
+            isEditMode = false
         }
     }
 }

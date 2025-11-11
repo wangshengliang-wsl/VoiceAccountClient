@@ -26,6 +26,54 @@ struct HomeView: View {
         let today = calendar.startOfDay(for: Date())
         return expenses.filter { calendar.isDate($0.date, inSameDayAs: today) }
     }
+
+    // 计算今日总支出
+    var todayTotal: Double {
+        return todayExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    // 计算昨日总支出
+    var yesterdayTotal: Double {
+        let calendar = Calendar.current
+        let today = Date()
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today) else {
+            return 0
+        }
+        let yesterdayExpenses = expenses.filter {
+            calendar.isDate($0.date, inSameDayAs: yesterday)
+        }
+        return yesterdayExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    // 计算较昨天的变化百分比
+    var dailyChangePercentage: (value: Double, isIncrease: Bool, isFlat: Bool)? {
+        let currentTotal = todayTotal
+        let previousTotal = yesterdayTotal
+
+        // 如果都是0,不显示趋势
+        if currentTotal == 0 && previousTotal == 0 {
+            return nil
+        }
+
+        // 如果昨天为0但今天有值,显示上升100%
+        if previousTotal == 0 && currentTotal > 0 {
+            return (100.0, true, false)
+        }
+
+        // 如果今天为0但昨天有值,显示下降100%
+        if currentTotal == 0 && previousTotal > 0 {
+            return (100.0, false, false)
+        }
+
+        let change = ((currentTotal - previousTotal) / previousTotal) * 100
+
+        // 判断是否持平 (变化小于0.5%)
+        if abs(change) < 0.5 {
+            return (0, false, true)
+        }
+
+        return (abs(change), change > 0, false)
+    }
     
     var monthlyTotal: Double {
         let calendar = Calendar.current
@@ -34,6 +82,49 @@ struct HomeView: View {
             calendar.isDate($0.date, equalTo: now, toGranularity: .month)
         }
         return monthExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    // 计算上月总支出
+    var lastMonthTotal: Double {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: now) else {
+            return 0
+        }
+        let lastMonthExpenses = expenses.filter {
+            calendar.isDate($0.date, equalTo: lastMonth, toGranularity: .month)
+        }
+        return lastMonthExpenses.reduce(0) { $0 + $1.amount }
+    }
+
+    // 计算较上月的变化百分比
+    var monthlyChangePercentage: (value: Double, isIncrease: Bool, isFlat: Bool)? {
+        let currentTotal = monthlyTotal
+        let previousTotal = lastMonthTotal
+
+        // 如果都是0,显示持平
+        if currentTotal == 0 && previousTotal == 0 {
+            return nil  // 不显示任何趋势
+        }
+
+        // 如果上月为0但本月有值,显示上升100%
+        if previousTotal == 0 && currentTotal > 0 {
+            return (100.0, true, false)
+        }
+
+        // 如果本月为0但上月有值,显示下降100%
+        if currentTotal == 0 && previousTotal > 0 {
+            return (100.0, false, false)
+        }
+
+        let change = ((currentTotal - previousTotal) / previousTotal) * 100
+
+        // 判断是否持平 (变化小于0.5%)
+        if abs(change) < 0.5 {
+            return (0, false, true)
+        }
+
+        return (abs(change), change > 0, false)
     }
     
     var body: some View {
@@ -55,8 +146,9 @@ struct HomeView: View {
                                 selectedExpenses.removeAll()
                             }
                         }) {
-                            Text(isEditMode ? "完成" : "编辑")
+                            Text(isEditMode ? "取消" : "批量删除")
                                 .fontWeight(.medium)
+                                .foregroundColor(isEditMode ? .primary : .red)
                         }
                     }
                 }
@@ -65,16 +157,37 @@ struct HomeView: View {
                 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Monthly Summary Card
+                        // Daily Summary Card
                         VStack(spacing: 8) {
-                            Text("本月支出")
+                            Text("今日支出")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                                Text("\(currencyManager.currentCurrency.symbol) \(monthlyTotal, specifier: "%.2f")")
+                                Text("\(currencyManager.currentCurrency.symbol) \(todayTotal, specifier: "%.2f")")
                                 .font(.system(size: 34, weight: .bold))
-                            Text("较上月 +12.5%")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            // 较昨天变化百分比
+                            if let change = dailyChangePercentage {
+                                HStack(spacing: 4) {
+                                    // 持平时不显示"较昨天"文案
+                                    if !change.isFlat {
+                                        Text("较昨天")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    if change.isFlat {
+                                        Image(systemName: "equal")
+                                            .font(.caption)
+                                        Text("持平")
+                                            .font(.caption)
+                                    } else {
+                                        Image(systemName: change.isIncrease ? "arrow.up" : "arrow.down")
+                                            .font(.caption)
+                                        Text("\(change.value, specifier: "%.1f")%")
+                                            .font(.caption)
+                                    }
+                                }
+                                .foregroundColor(change.isFlat ? .gray : (change.isIncrease ? .red : .green))
+                            }
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -309,6 +422,13 @@ struct ExpenseRowView: View {
             ExpenseEditView(expense: expense)
                 .environmentObject(ThemeManager.shared)
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if !isEditMode, let onDelete = onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("删除", systemImage: "trash")
+                }
+            }
+        }
         .contextMenu {
             if !isEditMode, let onDelete = onDelete {
                 Button(role: .destructive, action: onDelete) {
@@ -323,7 +443,7 @@ struct ManualInputView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var themeManager: ThemeManager
-    @StateObject private var categoryManager = CategoryManager.shared
+    @ObservedObject private var categoryManager = CategoryManager.shared
     
     @State private var amount = ""
     @State private var title = ""
@@ -335,8 +455,9 @@ struct ManualInputView: View {
             ZStack {
                 // 主题背景
                 ThemedBackgroundView()
-                
-                VStack(spacing: 20) {
+
+                ScrollView {
+                    VStack(spacing: 20) {
                     // Amount Input
                     VStack(alignment: .leading, spacing: 8) {
                         Text("金额")
@@ -377,30 +498,39 @@ struct ManualInputView: View {
                         Text("分类")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        
+
                         if categoryManager.allCategories.isEmpty {
                             Text("暂无分类，请先在设置中添加")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         } else {
-                            Picker("分类", selection: $selectedCategoryName) {
+                            // 使用 LazyVGrid 平铺展示分类
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 12)], spacing: 12) {
                                 ForEach(categoryManager.allCategories) { category in
-                                    HStack {
-                                        Image(systemName: category.iconName)
-                                        Text(category.name)
+                                    Button(action: {
+                                        selectedCategoryName = category.name
+                                    }) {
+                                        VStack(spacing: 6) {
+                                            // 圆形图标背景
+                                            ZStack {
+                                                Circle()
+                                                    .fill(selectedCategoryName == category.name ? category.color : category.color.opacity(0.15))
+                                                    .frame(width: 50, height: 50)
+                                                Image(systemName: category.iconName)
+                                                    .font(.system(size: 24))
+                                                    .foregroundColor(selectedCategoryName == category.name ? .white : category.color)
+                                            }
+                                            Text(category.name)
+                                                .font(.caption)
+                                                .fontWeight(selectedCategoryName == category.name ? .semibold : .regular)
+                                                .foregroundColor(.primary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
                                     }
-                                    .tag(category.name)
+                                    .buttonStyle(.plain)
                                 }
                             }
-                            .pickerStyle(.menu)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                            )
                         }
                     }
                     
@@ -424,8 +554,11 @@ struct ManualInputView: View {
                     Spacer()
                 }
                 .padding()
+                .dismissKeyboardOnTap()
             }
-            .navigationTitle("添加支出")
+            .dismissKeyboardOnScroll()
+        }
+        .navigationTitle("添加支出")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
