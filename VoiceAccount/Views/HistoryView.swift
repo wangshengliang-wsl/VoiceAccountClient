@@ -13,6 +13,7 @@ struct HistoryView: View {
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var currencyManager = CurrencyManager.shared
+    @ObservedObject private var syncManager = SyncManager.shared
     @State private var searchText = ""
     @State private var isEditMode = false
     @State private var selectedExpenses: Set<UUID> = []
@@ -162,17 +163,44 @@ struct HistoryView: View {
 
     private func deleteExpense(_ expense: Expense) {
         withAnimation {
+            // Delete from cloud first if synced
+            let expenseId = expense.id
+            let wasSynced = expense.syncStatus == .synced
+
+            // Delete locally
             modelContext.delete(expense)
+
+            // Trigger auto-sync to update cloud
+            if wasSynced {
+                Task {
+                    try? await syncManager.deleteExpenseFromCloud(expenseId: expenseId)
+                }
+            }
         }
     }
 
     private func deleteSelectedExpenses() {
         withAnimation {
+            var syncedExpenseIds: [UUID] = []
+
             for expense in filteredExpenses where selectedExpenses.contains(expense.id) {
+                if expense.syncStatus == .synced {
+                    syncedExpenseIds.append(expense.id)
+                }
                 modelContext.delete(expense)
             }
+
             selectedExpenses.removeAll()
             isEditMode = false
+
+            // Delete from cloud
+            if !syncedExpenseIds.isEmpty {
+                Task {
+                    for expenseId in syncedExpenseIds {
+                        try? await syncManager.deleteExpenseFromCloud(expenseId: expenseId)
+                    }
+                }
+            }
         }
     }
 }

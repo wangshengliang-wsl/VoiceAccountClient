@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		FC5175842EC4532A006B2F27 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = FC5175832EC4532A006B2F27 /* Auth */; };
+		FC5175862EC4532A006B2F27 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = FC5175852EC4532A006B2F27 /* Functions */; };
+		FC5175882EC4532A006B2F27 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = FC5175872EC4532A006B2F27 /* PostgREST */; };
+		FC51758A2EC4532A006B2F27 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = FC5175892EC4532A006B2F27 /* Realtime */; };
+		FC51758C2EC4532A006B2F27 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = FC51758B2EC4532A006B2F27 /* Storage */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		FC8FFEC42EC0E943009CC15C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +60,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FC5175882EC4532A006B2F27 /* PostgREST in Frameworks */,
+				FC5175862EC4532A006B2F27 /* Functions in Frameworks */,
+				FC5175842EC4532A006B2F27 /* Auth in Frameworks */,
+				FC51758C2EC4532A006B2F27 /* Storage in Frameworks */,
+				FC51758A2EC4532A006B2F27 /* Realtime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +125,12 @@
 			);
 			name = VoiceAccount;
 			packageProductDependencies = (
+				FC5175812EC4532A006B2F27 /* Supabase */,
+				FC5175832EC4532A006B2F27 /* Auth */,
+				FC5175852EC4532A006B2F27 /* Functions */,
+				FC5175872EC4532A006B2F27 /* PostgREST */,
+				FC5175892EC4532A006B2F27 /* Realtime */,
+				FC51758B2EC4532A006B2F27 /* Storage */,
 			);
 			productName = VoiceAccount;
 			productReference = FC8FFEB42EC0E942009CC15C /* VoiceAccount.app */;
@@ -195,6 +214,9 @@
 			);
 			mainGroup = FC8FFEAB2EC0E942009CC15C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FC8FFEB52EC0E942009CC15C /* Products */;
 			projectDirPath = "";
@@ -574,6 +596,50 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FC5175812EC4532A006B2F27 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+		FC5175832EC4532A006B2F27 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		FC5175852EC4532A006B2F27 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		FC5175872EC4532A006B2F27 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		FC5175892EC4532A006B2F27 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		FC51758B2EC4532A006B2F27 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC5175822EC4521F006B2F27 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FC8FFEAC2EC0E942009CC15C /* Project object */;
 }

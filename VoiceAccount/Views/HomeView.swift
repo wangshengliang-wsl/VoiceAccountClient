@@ -13,6 +13,7 @@ struct HomeView: View {
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var currencyManager = CurrencyManager.shared
+    @ObservedObject private var syncManager = SyncManager.shared
     @StateObject private var audioRecorder = AudioRecorder()
     @State private var showingManualInput = false
     @State private var showingVoiceInput = false
@@ -320,17 +321,44 @@ struct HomeView: View {
 
     private func deleteExpense(_ expense: Expense) {
         withAnimation {
+            // Delete from cloud first if synced
+            let expenseId = expense.id
+            let wasSynced = expense.syncStatus == .synced
+
+            // Delete locally
             modelContext.delete(expense)
+
+            // Trigger auto-sync to update cloud
+            if wasSynced {
+                Task {
+                    try? await syncManager.deleteExpenseFromCloud(expenseId: expenseId)
+                }
+            }
         }
     }
 
     private func deleteSelectedExpenses() {
         withAnimation {
+            var syncedExpenseIds: [UUID] = []
+
             for expense in todayExpenses where selectedExpenses.contains(expense.id) {
+                if expense.syncStatus == .synced {
+                    syncedExpenseIds.append(expense.id)
+                }
                 modelContext.delete(expense)
             }
+
             selectedExpenses.removeAll()
             isEditMode = false
+
+            // Delete from cloud
+            if !syncedExpenseIds.isEmpty {
+                Task {
+                    for expenseId in syncedExpenseIds {
+                        try? await syncManager.deleteExpenseFromCloud(expenseId: expenseId)
+                    }
+                }
+            }
         }
     }
 }
@@ -444,6 +472,7 @@ struct ManualInputView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var categoryManager = CategoryManager.shared
+    @ObservedObject private var syncManager = SyncManager.shared
     
     @State private var amount = ""
     @State private var title = ""
@@ -583,17 +612,22 @@ struct ManualInputView: View {
     }
     
     private func saveExpense() {
-        guard let amountValue = Double(amount), 
+        guard let amountValue = Double(amount),
               !title.isEmpty,
               !selectedCategoryName.isEmpty else { return }
-        
+
         let expense = Expense(
             amount: amountValue,
             title: title,
             categoryName: selectedCategoryName,
-            date: date
+            date: date,
+            userId: AuthManager.shared.userId
         )
         modelContext.insert(expense)
+
+        // Trigger auto-sync after adding new expense
+        syncManager.autoSyncAfterChange(modelContext: modelContext)
+
         dismiss()
     }
 }

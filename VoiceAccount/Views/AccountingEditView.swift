@@ -6,6 +6,7 @@ struct AccountingEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var themeManager: ThemeManager
+    @ObservedObject private var syncManager = SyncManager.shared
     @Binding var items: [AccountingItem]
 
     // 编辑状态
@@ -149,7 +150,8 @@ struct AccountingEditView: View {
                 amount: amount,
                 title: item.title,
                 categoryName: item.category,
-                date: item.date
+                date: item.date,
+                userId: AuthManager.shared.userId
             )
         }
 
@@ -161,10 +163,14 @@ struct AccountingEditView: View {
             for expense in validItems {
                 modelContext.insert(expense)
             }
-            
+
             // 尝试保存上下文
             do {
                 try modelContext.save()
+
+                // Trigger auto-sync after batch adding expenses
+                syncManager.autoSyncAfterChange(modelContext: modelContext)
+
                 // 更新绑定的数据（用于返回给调用者）
                 items = validItems.map { expense in
                     AccountingItem(
@@ -178,7 +184,7 @@ struct AccountingEditView: View {
             } catch {
                 saveMessage = "保存失败: \(error.localizedDescription)"
             }
-            
+
             showingSaveAlert = true
         }
     }

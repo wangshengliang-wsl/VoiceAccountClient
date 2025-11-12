@@ -7,6 +7,7 @@ struct ExpenseEditView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject private var categoryManager = CategoryManager.shared
     @ObservedObject private var currencyManager = CurrencyManager.shared
+    @ObservedObject private var syncManager = SyncManager.shared
 
     let expense: Expense
 
@@ -148,8 +149,15 @@ struct ExpenseEditView: View {
         expense.date = date
         expense.notes = notes.isEmpty ? nil : notes
 
+        // Mark as updated for sync
+        expense.markAsUpdated()
+
         do {
             try modelContext.save()
+
+            // Trigger auto-sync after editing expense
+            syncManager.autoSyncAfterChange(modelContext: modelContext)
+
             saveMessage = "保存成功"
             showingSaveAlert = true
         } catch {

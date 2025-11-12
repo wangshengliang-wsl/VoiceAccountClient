@@ -15,6 +15,8 @@ struct SettingsView: View {
     @ObservedObject private var categoryManager = CategoryManager.shared
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var syncManager = SyncManager.shared
 
     @State private var showingCurrencyPicker = false
     @State private var showingCategoryManager = false
@@ -24,6 +26,9 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingUserAgreement = false
     @State private var showingThemeSettings = false
+    @State private var showingSignOutAlert = false
+    @State private var showingSyncAlert = false
+    @State private var syncMessage = ""
     
     // 根据 categoryManager 中的所有分类来统计
     var categoryCounts: [(name: String, count: Int, iconName: String, color: Color)] {
@@ -51,6 +56,151 @@ struct SettingsView: View {
                 
                 ScrollView {
                     VStack(spacing: 20) {
+                        // Account Section
+                        if authManager.isAuthenticated {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: "person.circle.fill")
+                                        .foregroundColor(.blue)
+                                    Text("账户信息")
+                                        .font(.headline)
+                                }
+
+                                VStack(spacing: 12) {
+                                    // User Email
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("邮箱")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Text(authManager.userEmail ?? "未知")
+                                                .fontWeight(.medium)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding()
+                                    .background(.white.opacity(0.3))
+                                    .cornerRadius(12)
+
+                                    // Sign Out Button
+                                    Button(action: {
+                                        showingSignOutAlert = true
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                            Text("退出登录")
+                                                .fontWeight(.medium)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .foregroundColor(.white)
+                                        .background(
+                                            LinearGradient(
+                                                colors: [Color.orange, Color.orange.opacity(0.8)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .cornerRadius(12)
+                                        .shadow(color: .orange.opacity(0.3), radius: 8)
+                                    }
+                                }
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(20)
+                            .shadow(color: .black.opacity(0.1), radius: 10)
+                            .padding(.horizontal)
+
+                            // Data Sync Section
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .foregroundColor(.green)
+                                    Text("数据同步")
+                                        .font(.headline)
+                                }
+
+                                VStack(spacing: 12) {
+                                    // Sync Status
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("同步状态")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            HStack(spacing: 8) {
+                                                Circle()
+                                                    .fill(syncStatusColor)
+                                                    .frame(width: 8, height: 8)
+                                                Text(syncManager.syncState.displayText)
+                                                    .fontWeight(.medium)
+                                            }
+                                        }
+                                        Spacer()
+
+                                        if syncManager.pendingSyncCount > 0 {
+                                            Text("\(syncManager.pendingSyncCount) 待同步")
+                                                .font(.caption)
+                                                .foregroundColor(.orange)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.orange.opacity(0.2))
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                    .padding()
+                                    .background(.white.opacity(0.3))
+                                    .cornerRadius(12)
+
+                                    // Last Sync Time
+                                    if let lastSync = syncManager.lastSyncTime {
+                                        HStack {
+                                            Text("上次同步:")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Text(lastSync, style: .relative)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal)
+                                    }
+
+                                    // Manual Sync Button
+                                    Button(action: manualSync) {
+                                        HStack {
+                                            if syncManager.syncState == .syncing {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            } else {
+                                                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                                Text("立即同步")
+                                                    .fontWeight(.medium)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .foregroundColor(.white)
+                                        .background(
+                                            LinearGradient(
+                                                colors: [Color.green, Color.green.opacity(0.8)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .cornerRadius(12)
+                                        .shadow(color: .green.opacity(0.3), radius: 8)
+                                    }
+                                    .disabled(syncManager.syncState == .syncing)
+                                }
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(20)
+                            .shadow(color: .black.opacity(0.1), radius: 10)
+                            .padding(.horizontal)
+                        }
+
                         // Theme Settings
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
@@ -339,6 +489,21 @@ struct SettingsView: View {
         } message: {
             Text("此操作将永久删除所有记账数据，且无法恢复。您确定要继续吗？")
         }
+        .alert("退出登录", isPresented: $showingSignOutAlert) {
+            Button("取消", role: .cancel) {}
+            Button("退出", role: .destructive) {
+                Task {
+                    try? await authManager.signOut()
+                }
+            }
+        } message: {
+            Text("退出登录后，本地数据将保留，下次登录可继续同步。")
+        }
+        .alert("同步结果", isPresented: $showingSyncAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(syncMessage)
+        }
     }
     
     private func exportData() {
@@ -427,6 +592,33 @@ struct SettingsView: View {
         print("📋 显示分享界面...")
         rootViewController.present(activityVC, animated: true) {
             print("✅ 分享界面已显示")
+        }
+    }
+
+    // MARK: - Helper Properties
+
+    private var syncStatusColor: Color {
+        switch syncManager.syncState {
+        case .idle: return .gray
+        case .syncing: return .blue
+        case .synced: return .green
+        case .offline: return .orange
+        case .error: return .red
+        }
+    }
+
+    // MARK: - Helper Functions
+
+    private func manualSync() {
+        Task {
+            do {
+                try await syncManager.fullSync(modelContext: modelContext)
+                syncMessage = "同步成功"
+                showingSyncAlert = true
+            } catch {
+                syncMessage = "同步失败: \(error.localizedDescription)"
+                showingSyncAlert = true
+            }
         }
     }
 

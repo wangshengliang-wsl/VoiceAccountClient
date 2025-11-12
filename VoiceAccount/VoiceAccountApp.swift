@@ -11,7 +11,8 @@ import SwiftData
 @main
 struct VoiceAccountApp: App {
     @StateObject private var themeManager = ThemeManager.shared
-    
+    @StateObject private var authManager = AuthManager.shared
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Expense.self,
@@ -27,10 +28,22 @@ struct VoiceAccountApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.appearanceMode.colorScheme)
+            Group {
+                if authManager.isAuthenticated {
+                    // Authenticated: Show main app
+                    MainTabView()
+                        .environmentObject(themeManager)
+                        .environmentObject(authManager)
+                        .preferredColorScheme(themeManager.appearanceMode.colorScheme)
+                        .modelContainer(sharedModelContainer)
+                } else {
+                    // Not authenticated: Show auth flow
+                    AuthContainerView()
+                        .environmentObject(themeManager)
+                        .environmentObject(authManager)
+                        .preferredColorScheme(themeManager.appearanceMode.colorScheme)
+                }
+            }
         }
-        .modelContainer(sharedModelContainer)
     }
 }
